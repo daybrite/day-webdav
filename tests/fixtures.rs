@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 //! All fixture bodies are synthetic server exchanges, not bundled application resources.
 use base64::{Engine, engine::general_purpose::STANDARD};
-use day_part_webdav::{
+use day_webdav::{
     http::{
         simulation::{Reply, Simulation},
         transport::PreparedBody,

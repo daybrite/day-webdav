@@ -26,7 +26,7 @@ name = "dayapp"
 [dependencies]
 day = { package = "day-app", version = "0.6.2", features = [] }
 day-piece-settings = { version = "0.6.2" }
-day-part-webdav = { path = "..", features = ["reqwest", "demo-server"] }
+day-webdav = { path = "..", features = ["reqwest", "demo-server"] }
 percent-encoding = "2"
 
 [build-dependencies]

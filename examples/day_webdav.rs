@@ -1,7 +1,7 @@
 // Copyright © The Daybrite Project
 // SPDX-License-Identifier: MPL-2.0
 // Developer command-line example; diagnostics and protocol data are not application UI.
-use day_part_webdav::{Authentication, Client, Depth, Endpoint, ResourcePath};
+use day_webdav::{Authentication, Client, Depth, Endpoint, ResourcePath};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let endpoint = Endpoint::new(&std::env::var("DAV_ENDPOINT")?)?;
     let client = Client::builder(endpoint)

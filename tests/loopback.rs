@@ -1,7 +1,7 @@
 // Copyright © The Daybrite Project
 // SPDX-License-Identifier: MPL-2.0
 #![cfg(all(feature = "demo-server", not(target_arch = "wasm32")))]
-use day_part_webdav::*;
+use day_webdav::*;
 
 #[test]
 fn native_demo_fixture() {

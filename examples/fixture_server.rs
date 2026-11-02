@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 #[cfg(all(feature = "demo-server", not(target_arch = "wasm32")))]
 fn main() {
-    let _server = day_part_webdav::testing::Server::bind(18444).expect("loopback fixture port");
+    let _server = day_webdav::testing::Server::bind(18444).expect("loopback fixture port");
     println!("http://127.0.0.1:18444/dav/");
     loop {
         std::thread::park();

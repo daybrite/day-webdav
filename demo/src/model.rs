@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MPL-2.0
 use crate::{Section, res};
 use day::prelude::*;
-use day_part_webdav::Resource as DavResource;
-use day_part_webdav::{
+use day_webdav::Resource as DavResource;
+use day_webdav::{
     self as dav,
     http::{Provider, Session},
     *,

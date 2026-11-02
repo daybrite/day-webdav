@@ -16,7 +16,7 @@ SYNTHETIC_PASSWORD='synthetic-local-fixture-only'
 
 @contextlib.contextmanager
 def apache():
-    with tempfile.TemporaryDirectory(prefix='day-part-webdav-') as tmp:
+    with tempfile.TemporaryDirectory(prefix='day-webdav-') as tmp:
         root=Path(tmp);(root/'data').mkdir();(root/'locks').mkdir()
         with socket.socket() as s:s.bind(('127.0.0.1',0));port=s.getsockname()[1]
         modules=['mpm_event','unixd','authn_core','authn_file','authz_core','authz_user','auth_basic','dav','dav_fs']

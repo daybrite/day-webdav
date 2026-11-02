@@ -1,10 +1,10 @@
 [package]
-name = "day-part-webdav"
+name = "day-webdav"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.89"
 description = "Bounded, namespace-aware WebDAV over Day's native HTTP stacks"
-repository = "https://github.com/daybrite/day-part-webdav"
+repository = "https://github.com/daybrite/day-webdav"
 license = "MPL-2.0"
 exclude = ["scripts/__pycache__/**"]
 

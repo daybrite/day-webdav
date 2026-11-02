@@ -480,7 +480,7 @@ impl Client {
                 .allow_constrained(p.allow_constrained)
                 .cache(CachePolicy::Reload)
                 .header("Accept-Encoding", "identity")
-                .header("User-Agent", "day-part-webdav/0.1");
+                .header("User-Agent", "day-webdav/0.1");
             if !bytes.is_empty() {
                 request = request.body(bytes.clone());
             }

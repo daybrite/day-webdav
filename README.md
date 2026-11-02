@@ -1,4 +1,4 @@
-# day-part-webdav
+# day-webdav
 
 MPL-2.0 WebDAV foundation over `day-part-http`, created with `day new part`.
 The library is headless; **[WebDAV Explorer](demo/README.md)** is its conventional Day demo.
@@ -24,9 +24,9 @@ make arbitrary DAV servers transactional. See [research and limitations](docs/in
 ## Example
 
 ```rust,no_run
-use day_part_webdav::{Client, Depth, Endpoint, ResourcePath};
+use day_webdav::{Client, Depth, Endpoint, ResourcePath};
 
-async fn list() -> Result<(), day_part_webdav::Error> {
+async fn list() -> Result<(), day_webdav::Error> {
     let client = Client::builder(Endpoint::new("https://cloud.example/dav/private/")?).build();
     let listing = client.propfind(&ResourcePath::root(), Depth::One).await?;
     for resource in listing.resources {

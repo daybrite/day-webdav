@@ -1,6 +1,6 @@
 # WebDAV Explorer
 
-A conventional Day demo for `day-part-webdav`, scaffolded with `day new app`. It is a practical
+A conventional Day demo for `day-webdav`, scaffolded with `day new app`. It is a practical
 protocol workbench: inspect collections and headers, test conditional uploads, copy/move/delete,
 compare HTTP providers, cancel slow requests, and inspect per-property DAV failures.
 

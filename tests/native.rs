@@ -1,6 +1,6 @@
 // Copyright © The Daybrite Project
 // SPDX-License-Identifier: MPL-2.0
-use day_part_webdav::*;
+use day_webdav::*;
 use futures_lite::future::block_on;
 
 #[test]

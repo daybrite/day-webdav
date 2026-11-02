@@ -168,7 +168,7 @@ pub fn browser() -> impl Piece {
             list(
                 items(
                     move || s.rows.get(),
-                    |r: &day_part_webdav::Resource| r.href.clone(),
+                    |r: &day_webdav::Resource| r.href.clone(),
                 ),
                 move |slot| {
                     column((

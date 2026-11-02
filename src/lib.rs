@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 //! WebDAV resource operations over [`day_part_http`].
 //!
-//! This part owns URL confinement, DAV XML and bounded requests. Applications own sync state,
+//! This crate owns URL confinement, DAV XML and bounded requests. Applications own sync state,
 //! enrollment, conflicts and durable retry queues. Writes are sent once: a failed exchange can
 //! have changed the server. Dropping an operation cancels its HTTP future but cannot undo remote
 //! side effects. Error codes are developer diagnostics, not localized UI text.
