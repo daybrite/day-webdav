@@ -7,7 +7,7 @@ mod pages;
 use model::Scene;
 day::resources!();
 day::day_start!(options: res::window_options(), root);
-day::routes! {pub(crate) enum Section {Connection=>"connection",Browser=>"browser",Response=>"response",Settings=>"settings"}}
+day::routes! {pub(crate) enum Section {Files=>"files",Connection=>"connection",Browser=>"browser",Response=>"response",Settings=>"settings"}}
 pub fn root() -> impl Piece {
     let preferences = Preferences::new()
         .about(About::from_manifest().website("https://daybrite.dev"))
@@ -17,6 +17,9 @@ pub fn root() -> impl Piece {
         nav(scene.section)
             .title(res::str::app_title())
             .items((
+                item(Section::Files, res::str::nav_files())
+                    .icon(res::vectors::folder)
+                    .page(pages::files),
                 item(Section::Connection, res::str::nav_connection())
                     .icon(res::vectors::tab_welcome)
                     .page(pages::connection),

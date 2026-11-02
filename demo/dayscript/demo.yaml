@@ -2,6 +2,42 @@
 # No HTTP interception in this app. The web target uses scripts/ci-fixture.sh.
 flow:
   - wait_for: { id: nav }
+
+  # Files: sign in to the fixture, build a folder and a file, then edit, rename and delete it.
+  # The app selects what it creates, so the preview needs no tree click.
+  - navigate: { route: files }
+  - tap: { id: files_fixture }
+  - tap: { id: files_sign_in }
+  - wait_for: { id: "file_node:fixture.txt", timeout_secs: 30 }
+  - dialog_mode: { mode: scripted }
+  - tap: { id: files_new_folder }
+  - assert_presented: {}
+  - respond: { text: "Notes" }
+  - wait_for: { id: "file_node:Notes%2F", timeout_secs: 30 }
+  - wait_for: { id: preview_folder }
+  - tap: { id: files_new_file }
+  - assert_presented: {}
+  - respond: { text: "hello.txt" }
+  - wait_for: { id: "file_node:Notes%2Fhello.txt", timeout_secs: 30 }
+  - wait_for: { id: preview_text, timeout_secs: 30 }
+  - input: { id: preview_text, text: "Written by the walkthrough" }
+  - tap: { id: preview_save }
+  - assert_text: { id: files_status, key: files_saved, timeout_secs: 30 }
+  - screenshot: files
+  - tap: { id: preview_rename }
+  - assert_presented: {}
+  - respond: { text: "renamed.txt" }
+  - wait_for: { id: "file_node:Notes%2Frenamed.txt", timeout_secs: 30 }
+  - assert_text: { id: preview_name, text: "renamed.txt" }
+  - tap: { id: preview_delete }
+  - assert_presented: {}
+  - respond: { button: 1 }
+  - assert_text: { id: files_status, key: files_deleted, timeout_secs: 30 }
+  - assert_missing: { id: "file_node:Notes%2Frenamed.txt" }
+  - dialog_mode: { mode: native }
+  - tap: { id: files_sign_out }
+  - wait_for: { id: files_sign_in }
+
   - navigate: { route: connection }
   - tap: { id: use_fixture }
   - select: { id: http_provider, index: 0, skip_on: [web-dom, harmony-arkui] }

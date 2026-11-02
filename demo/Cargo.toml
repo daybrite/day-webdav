@@ -29,6 +29,9 @@ day-piece-settings = { version = "0.6.2" }
 day-webdav = { path = "..", features = ["reqwest", "demo-server"] }
 percent-encoding = "2"
 
+[dev-dependencies]
+futures-lite = "2"
+
 [build-dependencies]
 day-build = { version = "0.6.2" }
 

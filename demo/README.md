@@ -1,8 +1,9 @@
 # WebDAV Explorer
 
-A conventional Day demo for `day-webdav`, scaffolded with `day new app`. It is a practical
-protocol workbench: inspect collections and headers, test conditional uploads, copy/move/delete,
-compare HTTP providers, cancel slow requests, and inspect per-property DAV failures.
+A conventional Day demo for `day-webdav`, scaffolded with `day new app`. It is a file browser for a
+WebDAV account and a protocol workbench: browse an account as a tree, preview and edit its files,
+inspect collections and headers, test conditional uploads, copy/move/delete, compare HTTP
+providers, cancel slow requests, and inspect per-property DAV failures.
 
 ## Run
 
@@ -27,6 +28,15 @@ CI starts and stops that browser fixture automatically. The app's loopback HTTP 
 local testing; remote endpoints require HTTPS and ordinary platform certificate validation.
 
 ## Use
+
+Files signs in to an account and shows it as a tree. Folders list their contents the first time
+they open. Selecting a file previews it: text and SVG open in an editor, images draw, and other
+files show their size and type. Save writes the edited text with If-Match on the version that was
+opened, so a change made elsewhere in the meantime is refused rather than overwritten. Replace
+uploads a new version from this device the same way. Rename moves the item within its folder
+without overwriting, and Delete asks first. New folder and New file add to the selected folder.
+For Fastmail, choose Use Fastmail and sign in with an app password that has Files access; Use local
+fixture signs in to the in-memory fixture instead. Previews and uploads stop at 8 MB.
 
 Connection selects Native or Rust reqwest, authentication, and the collection URL. For Nextcloud,
 use a dedicated collection under `https://host/remote.php/dav/files/USERNAME/` with an app password.
