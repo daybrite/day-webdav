@@ -382,16 +382,22 @@ fn account(f: Files) -> impl Piece {
             .font(Font::Footnote)
             .secondary()
             .id(day::id!(files_status)),
-        split(file_tree(f), preview(f))
-            .axis(move || {
-                if day::size_class().is_some_and(|c| c.width == WidthClass::Compact) {
-                    SplitAxis::Vertical
-                } else {
-                    SplitAxis::Horizontal
-                }
-            })
-            .fraction(share)
-            .grow(),
+        // The size class picks a split with a fixed axis rather than feeding `.axis` a closure:
+        // a composed split reads its axis while it holds the tree, and through day 0.6.3 a
+        // closure that asked for the size class there panicked (WinUI, Android, ArkUI, web).
+        switch(
+            || day::size_class().is_some_and(|c| c.width == WidthClass::Compact),
+            move |compact: &bool| {
+                split(file_tree(f), preview(f))
+                    .axis(if *compact {
+                        SplitAxis::Vertical
+                    } else {
+                        SplitAxis::Horizontal
+                    })
+                    .fraction(share)
+            },
+        )
+        .grow(),
     ))
     .spacing(Space::S)
     .padding(Space::L)
