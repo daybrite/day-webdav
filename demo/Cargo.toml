@@ -24,16 +24,16 @@ mock = ["day/mock"]
 name = "dayapp"
 
 [dependencies]
-day = { package = "day-app", version = "0.6.2", features = [] }
-day-piece-settings = { version = "0.6.2" }
-day-webdav = { path = "..", features = ["reqwest", "demo-server"] }
+day = { package = "day-app", version = "0.*", features = [] }
+day-piece-settings = { version = "0.*" }
+day-webdav = { version = "0.*", path = "..", features = ["reqwest", "demo-server"] }
 percent-encoding = "2"
 
 [dev-dependencies]
 futures-lite = "2"
 
 [build-dependencies]
-day-build = { version = "0.6.2" }
+day-build = { version = "0.*" }
 
 
 [workspace]

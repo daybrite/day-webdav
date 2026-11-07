@@ -9,7 +9,7 @@ license = "MPL-2.0"
 exclude = ["scripts/__pycache__/**"]
 
 [package.metadata.day]
-compat = "0.6"
+compat = "0.*"
 
 [features]
 default = []
@@ -18,8 +18,8 @@ demo-server = []
 
 [dependencies]
 # 0.6.3 is the first release with the DAV methods (PROPFIND, MKCOL, COPY, MOVE, ...).
-day-part-http = "0.6.3"
-day-async = "0.6"
+day-part-http = "0.*"
+day-async = "0.*"
 url = "2"
 percent-encoding = "2"
 roxmltree = "0.21"
