@@ -130,7 +130,7 @@ pub fn connection() -> impl Piece {
         .spacing(Space::L)
         .padding(Space::L)
         .align(HAlign::Leading)
-        .grow_w(),
+        .grow(Dimension::Width),
     )
 }
 pub fn browser() -> impl Piece {
@@ -263,7 +263,7 @@ pub fn browser() -> impl Piece {
         .spacing(Space::M)
         .padding(Space::L)
         .align(HAlign::Leading)
-        .grow_w(),
+        .grow(Dimension::Width),
     )
 }
 pub fn response() -> impl Piece {
@@ -291,7 +291,7 @@ pub fn response() -> impl Piece {
         .spacing(Space::M)
         .padding(Space::L)
         .align(HAlign::Leading)
-        .grow_w(),
+        .grow(Dimension::Width),
     )
 }
 
@@ -349,7 +349,7 @@ fn sign_in(s: Scene) -> impl Piece {
         .spacing(Space::L)
         .padding(Space::L)
         .align(HAlign::Leading)
-        .grow_w(),
+        .grow(Dimension::Width),
     )
 }
 fn account(f: Files) -> impl Piece {
@@ -397,7 +397,7 @@ fn account(f: Files) -> impl Piece {
                     .fraction(share)
             },
         )
-        .grow(),
+        .grow(Dimension::Both),
     ))
     .spacing(Space::S)
     .padding(Space::L)
@@ -591,13 +591,13 @@ fn preview(f: Files) -> impl Piece {
                     ))
                     .spacing(Space::M)
                     .align(HAlign::Leading)
-                    .grow_w()
+                    .grow(Dimension::Width)
                 },
             ),
         ))
         .spacing(Space::M)
         .padding(Space::M)
         .align(HAlign::Leading)
-        .grow_w(),
+        .grow(Dimension::Width),
     )
 }
