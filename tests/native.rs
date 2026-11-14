@@ -33,7 +33,10 @@ fn lifecycle(provider: http::Provider, name: &str) {
                 password: std::env::var("DAV_FIXTURE_PASSWORD").unwrap(),
             })
             .build();
-        assert!(!client.options().await.unwrap().dav.is_empty());
+        assert_ne!(
+            client.options().await.unwrap().dav,
+            [] as [std::string::String; 0]
+        );
         let folder_name = format!("provider-{name}");
         let folder = ResourcePath::from_segments([folder_name.as_str()], true).unwrap();
         let file =

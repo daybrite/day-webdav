@@ -70,7 +70,8 @@ impl Retry {
             .base_delay
             .saturating_mul(1u32 << u32::from(attempt.min(16)))
             .min(self.max_delay);
-        let mut x = self.jitter_seed ^ salt ^ u64::from(attempt).wrapping_mul(0x9e3779b97f4a7c15);
+        let mut x =
+            self.jitter_seed ^ salt ^ u64::from(attempt).wrapping_mul(0x9e37_79b9_7f4a_7c15);
         x ^= x >> 12;
         x ^= x << 25;
         x ^= x >> 27;
@@ -85,11 +86,19 @@ pub(crate) fn retry_after(value: Option<&str>, now: Option<SystemTime>) -> Optio
         return Some(Duration::from_secs(seconds));
     }
     httpdate::parse_http_date(value).ok().map(|t| {
-        now.map(|now| t.duration_since(now).unwrap_or_default())
-            .unwrap_or(Duration::MAX)
+        now.map_or(Duration::MAX, |now| {
+            t.duration_since(now).unwrap_or_default()
+        })
     })
 }
 
+#[cfg_attr(
+    not(target_arch = "wasm32"),
+    expect(
+        clippy::unnecessary_wraps,
+        reason = "the web arm reads the time from a response header, which can be absent"
+    )
+)]
 pub(crate) fn wall_now(response: &day_part_http::Response) -> Option<SystemTime> {
     #[cfg(not(target_arch = "wasm32"))]
     {

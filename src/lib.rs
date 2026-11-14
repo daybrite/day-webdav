@@ -1,6 +1,6 @@
 // Copyright © The Daybrite Project
 // SPDX-License-Identifier: MPL-2.0
-//! WebDAV resource operations over [`day_part_http`].
+//! `WebDAV` resource operations over [`day_part_http`].
 //!
 //! This crate owns URL confinement, DAV XML and bounded requests. Applications own sync state,
 //! enrollment, conflicts and durable retry queues. Writes are sent once: a failed exchange can

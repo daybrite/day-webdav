@@ -88,6 +88,11 @@ impl MultiStatus {
                 || r.properties.iter().any(|p| !(200..300).contains(&p.status))
         })
     }
+    /// Parse a `207 Multi-Status` body.
+    ///
+    /// # Errors
+    /// Returns `Error::Limit` when the document exceeds `limits`, and otherwise an error when it is
+    /// not a well-formed multistatus document or an `href` leaves the endpoint.
     pub fn parse(
         bytes: &[u8],
         endpoint: &Endpoint,

@@ -1,6 +1,7 @@
 // Copyright © The Daybrite Project
 // SPDX-License-Identifier: MPL-2.0
 //! Bounded in-memory DAV fixture. Synthetic data only; binds numeric loopback, never the LAN.
+use std::fmt::Write as _;
 use std::{
     collections::BTreeMap,
     io::{self, BufRead, BufReader, Read, Write},
@@ -30,9 +31,17 @@ pub struct Server {
     shared: Arc<Shared>,
 }
 impl Server {
+    /// Start the fixture server on a free loopback port.
+    ///
+    /// # Errors
+    /// Returns the I/O error when the loopback listener cannot be bound.
     pub fn start() -> io::Result<Self> {
         Self::bind(0)
     }
+    /// Start the fixture server on `port` of the loopback address.
+    ///
+    /// # Errors
+    /// Returns the I/O error when the loopback listener cannot be bound.
     pub fn bind(port: u16) -> io::Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", port))?;
         let port = listener.local_addr()?.port();
@@ -178,7 +187,10 @@ fn serve(mut stream: TcpStream, shared: &Shared) -> io::Result<()> {
         stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 99\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\n\r\npartial")?;
         return Ok(());
     }
-    let mut state = shared.state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut state = shared
+        .state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let entry = state.entries.get(&path).cloned();
     let mut status = 200;
     let mut out = vec![];
@@ -234,7 +246,14 @@ fn serve(mut stream: TcpStream, shared: &Shared) -> io::Result<()> {
                     if key != &path && !(headers.get("depth").is_some_and(|d| d == "1") && direct) {
                         continue;
                     }
-                    xml.push_str(&format!("<d:response><d:href>{}</d:href><d:propstat><d:prop><d:resourcetype>{}</d:resourcetype><d:getetag>{}</d:getetag><d:getcontentlength>{}</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>",escape(key),if e.collection{"<d:collection/>"}else{""},escape(&e.etag),e.bytes.len()));
+                    let _ = write!(
+                        xml,
+                        "<d:response><d:href>{}</d:href><d:propstat><d:prop><d:resourcetype>{}</d:resourcetype><d:getetag>{}</d:getetag><d:getcontentlength>{}</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>",
+                        escape(key),
+                        if e.collection { "<d:collection/>" } else { "" },
+                        escape(&e.etag),
+                        e.bytes.len()
+                    );
                 }
                 xml.push_str("</d:multistatus>");
                 out = xml.into_bytes();
@@ -319,6 +338,10 @@ fn serve(mut stream: TcpStream, shared: &Shared) -> io::Result<()> {
     drop(state);
     answer(&mut stream, status, response_headers, out, method == "HEAD")
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "every call site builds the headers and the body for this one answer"
+)]
 fn answer(
     stream: &mut TcpStream,
     status: u16,

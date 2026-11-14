@@ -67,6 +67,13 @@ impl Ambient for Scene {
         }
     }
 }
+#[cfg_attr(
+    target_arch = "wasm32",
+    expect(
+        clippy::unnecessary_wraps,
+        reason = "the native arm starts a fixture server, which can fail"
+    )
+)]
 fn fixture_url() -> Option<String> {
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -75,7 +82,7 @@ fn fixture_url() -> Option<String> {
         SERVER
             .get_or_init(|| dav::testing::Server::start().ok())
             .as_ref()
-            .map(|s| s.url())
+            .map(day_webdav::testing::Server::url)
     }
     #[cfg(target_arch = "wasm32")]
     {
@@ -143,6 +150,10 @@ impl Scene {
         self.busy.set(false);
         self.status.set(res::str::status_cancelled().format());
     }
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "the list's selection callback hands over an owned id"
+    )]
     pub fn selected(self, id: String) {
         if let Some(resource) = self.rows.get_untracked().iter().find(|r| r.href == id) {
             if let Some(relative) = resource.href.strip_prefix(&self.endpoint.get_untracked()) {
@@ -204,12 +215,9 @@ impl Scene {
             self.status.set(res::str::write_disabled().format());
             return;
         }
-        let client = match self.client() {
-            Ok(c) => c,
-            Err(_) => {
-                self.status.set(res::str::endpoint_invalid().format());
-                return;
-            }
+        let Ok(client) = self.client() else {
+            self.status.set(res::str::endpoint_invalid().format());
+            return;
         };
         self.busy.set(true);
         self.status.set(res::str::status_working().format());
@@ -367,14 +375,13 @@ async fn smoke(client: &Client) -> Result<Output, Error> {
     let cleanup = client.delete(&dir, Condition::Unconditional).await;
     match (result, cleanup) {
         (Ok(output), Ok(_)) => Ok(output),
-        (Err(e), _) => Err(e),
-        (_, Err(e)) => Err(e),
+        (Err(e), _) | (_, Err(e)) => Err(e),
     }
 }
 
 /// The largest file the Files page previews or replaces in one exchange.
 const PREVIEW_LIMIT: usize = 8 * 1024 * 1024;
-/// Fastmail's WebDAV root, which signs in with an app password that has Files access.
+/// Fastmail's `WebDAV` root, which signs in with an app password that has Files access.
 pub const FASTMAIL: &str = "https://myfiles.fastmail.com/";
 
 /// One listed resource. `key` is the decoded path relative to the account root; a collection's
@@ -576,13 +583,12 @@ impl Files {
                 return;
             }
             self.busy.set(false);
-            match failure {
-                Some(e) => self.status.set(describe(&e, None)),
-                None => {
-                    self.status.set(res::str::files_refreshed().format());
-                    // Show the server's current version, or let go of an entry that is gone.
-                    self.select(selected.filter(|k| self.entry(k).is_some()));
-                }
+            if let Some(e) = failure {
+                self.status.set(describe(&e, None));
+            } else {
+                self.status.set(res::str::files_refreshed().format());
+                // Show the server's current version, or let go of an entry that is gone.
+                self.select(selected.filter(|k| self.entry(k).is_some()));
             }
         });
     }
@@ -690,7 +696,7 @@ impl Files {
                     self.nodes.update(|n| {
                         if let Some(e) = n.iter_mut().find(|e| e.key == key) {
                             e.size = Some(size);
-                            e.etag = etag.clone();
+                            e.etag.clone_from(&etag);
                         }
                     });
                     match edited {
@@ -914,12 +920,9 @@ impl Scene {
                 password: self.password.get_untracked(),
             }
         };
-        let client = match self.client_for(authentication, PREVIEW_LIMIT) {
-            Ok(c) => c,
-            Err(_) => {
-                files.status.set(res::str::endpoint_invalid().format());
-                return;
-            }
+        let Ok(client) = self.client_for(authentication, PREVIEW_LIMIT) else {
+            files.status.set(res::str::endpoint_invalid().format());
+            return;
         };
         files.sign_out();
         let generation = files.generation.get_untracked();
@@ -1075,10 +1078,12 @@ pub enum Kind {
 
 /// Decide how to preview a file from its name, its Content-Type, and a look at its bytes.
 pub fn classify(key: &str, content_type: &str, body: &[u8]) -> Kind {
+    const IMAGES: [&str; 9] = [
+        "png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "heic",
+    ];
     let extension = key
         .rsplit_once('.')
-        .map(|(_, e)| e.to_ascii_lowercase())
-        .unwrap_or_default();
+        .map_or_default(|(_, e)| e.to_ascii_lowercase());
     let mime = content_type
         .split(';')
         .next()
@@ -1088,9 +1093,6 @@ pub fn classify(key: &str, content_type: &str, body: &[u8]) -> Kind {
     if extension == "svg" || mime == "image/svg+xml" {
         return Kind::Svg;
     }
-    const IMAGES: [&str; 9] = [
-        "png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "heic",
-    ];
     if mime.starts_with("image/") || IMAGES.contains(&extension.as_str()) {
         return Kind::Image;
     }

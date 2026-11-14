@@ -32,6 +32,10 @@ impl std::fmt::Debug for Authentication {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EntityTag(String);
 impl EntityTag {
+    /// Parse an `ETag` header value.
+    ///
+    /// # Errors
+    /// Returns `Error::InvalidEntityTag` when `value` is not a quoted entity tag, weak or strong.
     pub fn parse(value: &str) -> Result<Self, Error> {
         let raw = value.strip_prefix("W/").unwrap_or(value);
         if raw.len() < 2
@@ -91,23 +95,28 @@ pub struct ClientBuilder {
     clock: Arc<dyn Clock>,
 }
 impl ClientBuilder {
+    #[must_use]
     pub fn authentication(mut self, auth: Authentication) -> Self {
         self.auth = auth;
         self
     }
+    #[must_use]
     pub fn session(mut self, session: Session) -> Self {
         self.session = session;
         self
     }
+    #[must_use]
     pub fn policy(mut self, policy: Policy) -> Self {
         self.policy = policy;
         self
     }
+    #[must_use]
     pub fn xml_limits(mut self, limits: XmlLimits) -> Self {
         self.limits = limits;
         self
     }
-    /// Use the same ManualClock as HTTP simulation for deterministic fault/retry tests.
+    /// Use the same `ManualClock` as HTTP simulation for deterministic fault/retry tests.
+    #[must_use]
     pub fn clock(mut self, clock: Arc<dyn Clock>) -> Self {
         self.clock = clock;
         self
@@ -165,10 +174,18 @@ impl Client {
     }
     /// Gates subsequent attempts. Drop in-flight futures to cancel already admitted transfers.
     pub fn set_network_state(&self, state: NetworkState) {
-        *self.inner.network.lock().unwrap_or_else(|e| e.into_inner()) = state;
+        *self
+            .inner
+            .network
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = state;
     }
     fn admit(&self) -> Result<(), Error> {
-        let state = *self.inner.network.lock().unwrap_or_else(|e| e.into_inner());
+        let state = *self
+            .inner
+            .network
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if state == NetworkState::Offline
             || (state == NetworkState::Constrained && !self.inner.policy.allow_constrained)
             || (state == NetworkState::Expensive && !self.inner.policy.allow_expensive)
@@ -178,6 +195,11 @@ impl Client {
         Ok(())
     }
     /// Advertised tokens only; not a conformance certificate or atomic-write guarantee.
+    ///
+    /// # Errors
+    /// Returns `Error::Deferred` when the network policy holds the request back, and otherwise an
+    /// error when the transfer fails or the server answers with a status this method does not
+    /// accept.
     pub async fn options(&self) -> Result<Discovery, Error> {
         let r = self
             .exchange(Method::Options, &ResourcePath::root(), vec![], vec![], true)
@@ -197,6 +219,12 @@ impl Client {
         })
     }
     /// Depth is deliberately bounded. A 404 property does not discard successful siblings.
+    ///
+    /// # Errors
+    /// Returns `Error::Deferred` when the network policy holds the request back, and otherwise an
+    /// error when the transfer fails or the server answers with a status this method does not
+    /// accept. A response that is not a bounded multistatus document within the endpoint is an
+    /// error too.
     pub async fn propfind(&self, path: &ResourcePath, depth: Depth) -> Result<MultiStatus, Error> {
         let r = self
             .exchange(
@@ -242,6 +270,12 @@ impl Client {
         }
         Ok(result)
     }
+    /// Fetch a resource, conditionally when an entity tag is given.
+    ///
+    /// # Errors
+    /// Returns `Error::Deferred` when the network policy holds the request back, and otherwise an
+    /// error when the transfer fails or the server answers with a status this method does not
+    /// accept.
     pub async fn get(
         &self,
         path: &ResourcePath,
@@ -264,6 +298,12 @@ impl Client {
         )?;
         Ok(r)
     }
+    /// Fetch a resource's headers.
+    ///
+    /// # Errors
+    /// Returns `Error::Deferred` when the network policy holds the request back, and otherwise an
+    /// error when the transfer fails or the server answers with a status this method does not
+    /// accept.
     pub async fn head(&self, path: &ResourcePath) -> Result<Response, Error> {
         let r = self
             .exchange(Method::Head, path, vec![], vec![], true)
@@ -271,6 +311,12 @@ impl Client {
         self.status(&r, &[200], false)?;
         Ok(r)
     }
+    /// Fetch a byte range of a resource.
+    ///
+    /// # Errors
+    /// Returns `Error::Deferred` when the network policy holds the request back, and otherwise an
+    /// error when the transfer fails or the server answers with a status this method does not
+    /// accept.
     pub async fn get_range(
         &self,
         path: &ResourcePath,
@@ -330,6 +376,12 @@ impl Client {
             total,
         })
     }
+    /// Create a collection.
+    ///
+    /// # Errors
+    /// Returns `Error::Deferred` when the network policy holds the request back, and otherwise an
+    /// error when the transfer fails or the server answers with a status this method does not
+    /// accept.
     pub async fn mkcol(&self, path: &ResourcePath) -> Result<Response, Error> {
         let r = self
             .exchange(Method::Mkcol, path, vec![], vec![], false)
@@ -337,6 +389,12 @@ impl Client {
         self.status(&r, &[201], true)?;
         Ok(r)
     }
+    /// Store a resource's bytes under a condition.
+    ///
+    /// # Errors
+    /// Returns `Error::Deferred` when the network policy holds the request back, and otherwise an
+    /// error when the transfer fails or the server answers with a status this method does not
+    /// accept.
     pub async fn put(
         &self,
         path: &ResourcePath,
@@ -352,6 +410,11 @@ impl Client {
         Ok(r)
     }
     /// Resource/collection deletion is explicit; never inferred from missing listings.
+    ///
+    /// # Errors
+    /// Returns `Error::Deferred` when the network policy holds the request back, and otherwise an
+    /// error when the transfer fails or the server answers with a status this method does not
+    /// accept. A multistatus answer is `Error::Partial`.
     pub async fn delete(
         &self,
         path: &ResourcePath,
@@ -370,6 +433,11 @@ impl Client {
         Ok(r)
     }
     /// COPY stays within the endpoint; overwriting a destination must be explicitly enabled.
+    ///
+    /// # Errors
+    /// Returns `Error::Deferred` when the network policy holds the request back, and otherwise an
+    /// error when the transfer fails or the server answers with a status this method does not
+    /// accept. A multistatus answer is `Error::Partial`.
     pub async fn copy(
         &self,
         from: &ResourcePath,
@@ -378,6 +446,12 @@ impl Client {
     ) -> Result<Response, Error> {
         self.relocate(Method::Copy, from, to, overwrite).await
     }
+    /// Move a resource within the endpoint.
+    ///
+    /// # Errors
+    /// Returns `Error::Deferred` when the network policy holds the request back, and otherwise an
+    /// error when the transfer fails or the server answers with a status this method does not
+    /// accept. A multistatus answer is `Error::Partial`.
     pub async fn move_resource(
         &self,
         from: &ResourcePath,
@@ -417,6 +491,10 @@ impl Client {
         }
         self.status(r, accepted, true)
     }
+    #[expect(
+        clippy::unused_self,
+        reason = "called as a method beside `mutation_status`, which reads the client"
+    )]
     fn status(&self, r: &Response, accepted: &[u16], write: bool) -> Result<(), Error> {
         if accepted.contains(&r.status) {
             return Ok(());

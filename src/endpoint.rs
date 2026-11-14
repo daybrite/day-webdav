@@ -10,6 +10,15 @@ impl ResourcePath {
     pub fn root() -> Self {
         Self(String::new())
     }
+    /// A path from unescaped segments, percent-encoded here.
+    ///
+    /// # Errors
+    /// Returns `Error::InvalidPath` when a segment is empty, `.` or `..`, or holds a control
+    /// character or a slash.
+    #[expect(
+        clippy::missing_panics_doc,
+        reason = "the unwraps are on a constant URL that always parses and has path segments"
+    )]
     pub fn from_segments<I, S>(segments: I, collection: bool) -> Result<Self, Error>
     where
         I: IntoIterator<Item = S>,
@@ -43,10 +52,19 @@ impl ResourcePath {
 #[derive(Clone, Debug)]
 pub struct Endpoint(pub(crate) Url);
 impl Endpoint {
+    /// An HTTPS endpoint.
+    ///
+    /// # Errors
+    /// Returns `Error::InvalidEndpoint` when `url` is not an HTTPS URL free of credentials, query
+    /// and fragment.
     pub fn new(url: &str) -> Result<Self, Error> {
         Self::parse(url, false)
     }
     /// Cleartext is allowed only for numeric loopback addresses in isolated tests.
+    ///
+    /// # Errors
+    /// Returns `Error::InvalidEndpoint` when `url` is neither HTTPS nor cleartext to a numeric
+    /// loopback address, or carries credentials, a query or a fragment.
     pub fn loopback(url: &str) -> Result<Self, Error> {
         Self::parse(url, true)
     }
@@ -78,6 +96,11 @@ impl Endpoint {
     pub fn url(&self, path: &ResourcePath) -> String {
         format!("{}{}", self.0, path.0)
     }
+    /// Resolve a response `href` against the requested URL.
+    ///
+    /// # Errors
+    /// Returns `Error::UnsafeHref` when `href` is ambiguous, does not resolve, or leaves the
+    /// endpoint.
     pub fn resolve_href(&self, requested: &str, href: &str) -> Result<String, Error> {
         reject_ambiguous(href)?;
         let base = Url::parse(requested).map_err(|_| Error::UnsafeHref)?;
@@ -150,11 +173,11 @@ fn canonicalize_path(url: &mut Url) -> Result<(), Error> {
         .map(|s| {
             percent_decode_str(s)
                 .decode_utf8()
-                .map(|s| s.into_owned())
+                .map(std::borrow::Cow::into_owned)
                 .map_err(|_| Error::UnsafeHref)
         })
         .collect::<Result<_, _>>()?;
-    let mut path = url.path_segments_mut().map_err(|_| Error::UnsafeHref)?;
+    let mut path = url.path_segments_mut().map_err(|()| Error::UnsafeHref)?;
     path.clear();
     for segment in segments {
         path.push(&segment);

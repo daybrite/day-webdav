@@ -5,6 +5,10 @@ use crate::{
     res,
 };
 use day::prelude::*;
+#[allow(
+    clippy::large_types_passed_by_value,
+    reason = "a page builder takes its own handle, and the size limit is crossed on 64-bit targets only"
+)]
 fn status(s: Scene) -> impl Piece {
     column((
         label(s.status).id(day::id!(operation_status)),
@@ -20,6 +24,10 @@ fn status(s: Scene) -> impl Piece {
     .spacing(Space::S)
     .align(HAlign::Leading)
 }
+#[allow(
+    clippy::large_types_passed_by_value,
+    reason = "a page builder takes its own handle, and the size limit is crossed on 64-bit targets only"
+)]
 fn provider(s: Scene) -> AnyPiece {
     #[cfg(all(not(target_arch = "wasm32"), not(target_env = "ohos")))]
     {
@@ -300,6 +308,10 @@ pub fn files() -> impl Piece {
     let s = Scene::ambient();
     when(move || s.files.signed_in(), move || account(s.files)).otherwise(move || sign_in(s))
 }
+#[allow(
+    clippy::large_types_passed_by_value,
+    reason = "a page builder takes its own handle, and the size limit is crossed on 64-bit targets only"
+)]
 fn sign_in(s: Scene) -> impl Piece {
     let f = s.files;
     scroll(
@@ -352,6 +364,10 @@ fn sign_in(s: Scene) -> impl Piece {
         .grow(Dimension::Width),
     )
 }
+#[allow(
+    clippy::large_types_passed_by_value,
+    reason = "a page builder takes its own handle, and the size limit is crossed on 64-bit targets only"
+)]
 fn account(f: Files) -> impl Piece {
     let share = Signal::new(0.38);
     column((
@@ -403,6 +419,10 @@ fn account(f: Files) -> impl Piece {
     .padding(Space::L)
     .align(HAlign::Leading)
 }
+#[allow(
+    clippy::large_types_passed_by_value,
+    reason = "a page builder takes its own handle, and the size limit is crossed on 64-bit targets only"
+)]
 fn file_tree(f: Files) -> impl Piece {
     tree(
         branches(
@@ -426,12 +446,7 @@ fn file_tree(f: Files) -> impl Piece {
                 label(move || slot.field(|e| e.name.clone())).single_line(),
                 spacer(),
                 label(move || {
-                    slot.field(|e| {
-                        e.size
-                            .filter(|_| !e.collection)
-                            .map(size_text)
-                            .unwrap_or_default()
-                    })
+                    slot.field(|e| e.size.filter(|_| !e.collection).map_or_default(size_text))
                 })
                 .font(Font::Caption)
                 .secondary()
@@ -452,6 +467,10 @@ fn file_tree(f: Files) -> impl Piece {
     .id(day::id!(file_tree))
 }
 /// Size, type and date for the selection's caption.
+#[allow(
+    clippy::large_types_passed_by_value,
+    reason = "a page builder takes its own handle, and the size limit is crossed on 64-bit targets only"
+)]
 fn summary(f: Files) -> String {
     let Some(entry) = f.selected_entry() else {
         return String::new();
@@ -478,6 +497,10 @@ fn summary(f: Files) -> String {
     .collect::<Vec<_>>()
     .join(" · ")
 }
+#[allow(
+    clippy::large_types_passed_by_value,
+    reason = "a page builder takes its own handle, and the size limit is crossed on 64-bit targets only"
+)]
 fn preview(f: Files) -> impl Piece {
     let file = move || f.selected_entry().is_some_and(|e| !e.collection);
     scroll(
@@ -490,7 +513,7 @@ fn preview(f: Files) -> impl Piece {
                 move || f.selected_entry().is_some(),
                 move || {
                     column((
-                        label(move || f.selected_entry().map(|e| e.name).unwrap_or_default())
+                        label(move || f.selected_entry().map_or_default(|e| e.name))
                             .font(Font::Title3)
                             .bold()
                             .selectable()
@@ -559,10 +582,7 @@ fn preview(f: Files) -> impl Piece {
                                 .id(day::id!(preview_folder))
                                 .any(),
                                 Preview::Image => image(move || {
-                                    f.image
-                                        .get()
-                                        .map(day::ImageSource::Bytes)
-                                        .unwrap_or_default()
+                                    f.image.get().map_or_default(day::ImageSource::Bytes)
                                 })
                                 .fit()
                                 .height(320.0)

@@ -1,6 +1,6 @@
 // Copyright © The Daybrite Project
 // SPDX-License-Identifier: MPL-2.0
-//! Every operation against a real WebDAV account, such as Fastmail Files
+//! Every operation against a real `WebDAV` account, such as Fastmail Files
 //! (`DAV_LIVE_URL=https://myfiles.fastmail.com/` with an app password that has Files access):
 //!
 //! ```sh
@@ -380,6 +380,10 @@ struct Report {
     passed: usize,
 }
 impl Report {
+    #[expect(
+        clippy::unused_self,
+        reason = "called on the report like the steps it introduces"
+    )]
     fn section(&self, name: &str) {
         println!("\n── {name} provider");
     }
