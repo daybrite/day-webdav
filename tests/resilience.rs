@@ -5,6 +5,7 @@ use day_webdav::{
     *,
 };
 use futures_lite::future::block_on;
+use std::assert_matches;
 use std::{
     future::Future,
     pin::Pin,
@@ -73,13 +74,13 @@ fn ambiguous_write_is_not_replayed() {
         ),
         &clock,
     );
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(Error::Transport {
             outcome: WriteOutcome::MayHaveApplied,
             ..
         })
-    ));
+    );
     assert_eq!(sim.requests().len(), 1);
 }
 
@@ -113,10 +114,7 @@ fn resumed_bytes_require_consistent_range_representation_and_validator() {
             ),
             &clock,
         );
-        assert!(
-            matches!(result, Err(Error::Protocol)),
-            "{range}, {etag}, {encoding}"
-        );
+        assert_matches!(result, Err(Error::Protocol), "{range}, {etag}, {encoding}");
         assert_eq!(sim.requests().len(), 1);
     }
 }
@@ -154,9 +152,7 @@ fn long_retry_after_goes_back_to_scheduler() {
         |_, _| true,
         |_| Ok(Reply::new(503, vec![]).header("Retry-After", "3600")),
     );
-    assert!(
-        matches!(drive(client.get(&ResourcePath::root(),None),&clock),Err(Error::Status {status:503,retry_after:Some(d),..}) if d==Duration::from_secs(3600))
-    );
+    assert_matches!(drive(client.get(&ResourcePath::root(),None),&clock),Err(Error::Status {status:503,retry_after:Some(d),..}) if d==Duration::from_secs(3600));
     assert_eq!(sim.requests().len(), 1);
 }
 #[test]
@@ -181,9 +177,7 @@ fn constrained_expensive_offline_admission_uses_no_network() {
         NetworkState::Offline,
     ] {
         client.set_network_state(state);
-        assert!(
-            matches!(block_on(client.get(&ResourcePath::root(),None)),Err(Error::Deferred(s)) if s==state)
-        );
+        assert_matches!(block_on(client.get(&ResourcePath::root(),None)),Err(Error::Deferred(s)) if s==state);
     }
     assert!(sim.requests().is_empty());
 }
@@ -197,10 +191,10 @@ fn network_policy_is_rechecked_after_backoff() {
     clock.advance(Duration::ZERO);
     assert!(poll(f.as_mut()).is_pending());
     client.set_network_state(NetworkState::Constrained);
-    assert!(matches!(
+    assert_matches!(
         drive(f, &clock),
         Err(Error::Deferred(NetworkState::Constrained))
-    ));
+    );
     assert_eq!(sim.requests().len(), 1);
 }
 #[test]
@@ -215,9 +209,7 @@ fn permanent_statuses_and_tls_failures_are_not_retried() {
     for status in [401, 403, 404, 409, 412, 413, 507] {
         let (client, sim, clock) = setup(Policy::default());
         sim.handle(|_, _| true, move |_| Ok(Reply::new(status, vec![])));
-        assert!(
-            matches!(drive(client.get(&ResourcePath::root(),None),&clock),Err(Error::Status {status:s,..}) if s==status)
-        );
+        assert_matches!(drive(client.get(&ResourcePath::root(),None),&clock),Err(Error::Status {status:s,..}) if s==status);
         assert_eq!(sim.requests().len(), 1);
     }
     let (client, sim, clock) = setup(Policy::default());
@@ -234,17 +226,17 @@ fn response_and_upload_limits_fail_closed() {
     };
     let (client, sim, clock) = setup(p);
     sim.handle(|_, _| true, |_| Ok(Reply::new(200, b"12345".to_vec())));
-    assert!(matches!(
+    assert_matches!(
         drive(client.get(&ResourcePath::root(), None), &clock),
         Err(Error::Transport {
             source: http::HttpError::BodyTooLarge { .. },
             ..
         })
-    ));
-    assert!(matches!(
+    );
+    assert_matches!(
         block_on(client.put(&ResourcePath::root(), vec![0; 5], Condition::CreateOnly)),
         Err(Error::Limit)
-    ));
+    );
     assert_eq!(sim.requests().len(), 1);
 }
 #[test]
@@ -254,10 +246,10 @@ fn redirects_do_not_forward_credentials_or_mutate_methods() {
         |_, _| true,
         |_| Ok(Reply::new(302, vec![]).header("Location", "https://evil.invalid/login")),
     );
-    assert!(matches!(
+    assert_matches!(
         drive(client.propfind(&ResourcePath::root(), Depth::One), &clock),
         Err(Error::Redirect { status: 302, .. })
-    ));
+    );
     assert_eq!(sim.requests().len(), 1);
     assert_eq!(sim.requests()[0].method, "PROPFIND");
 }
@@ -265,22 +257,20 @@ fn redirects_do_not_forward_credentials_or_mutate_methods() {
 fn partial_multi_status_delete_is_not_success() {
     let (client, sim, clock) = setup(Policy::default());
     sim.handle(|_,_|true,|_|Ok(Reply::new(207,br#"<multistatus xmlns="DAV:"><response><href>/dav/locked</href><status>HTTP/1.1 423 Locked</status></response></multistatus>"#.to_vec())));
-    assert!(
-        matches!(drive(client.delete(&ResourcePath::root(),Condition::Unconditional),&clock),Err(Error::Partial(m)) if m.has_failures())
-    );
+    assert_matches!(drive(client.delete(&ResourcePath::root(),Condition::Unconditional),&clock),Err(Error::Partial(m)) if m.has_failures());
     assert_eq!(sim.requests().len(), 1);
 }
 #[test]
 fn weak_etag_write_fails_before_network() {
     let (client, sim, _) = setup(Policy::default());
-    assert!(matches!(
+    assert_matches!(
         block_on(client.put(
             &ResourcePath::root(),
             vec![],
             Condition::IfMatch(EntityTag::parse("W/\"a\"").unwrap())
         )),
         Err(Error::InvalidEntityTag)
-    ));
+    );
     assert!(sim.requests().is_empty());
 }
 #[test]
@@ -299,12 +289,12 @@ fn slow_link_obeys_total_deadline() {
         ..Default::default()
     });
     sim.handle(|_, _| true, |_| Ok(Reply::new(200, vec![0; 20])));
-    assert!(matches!(
+    assert_matches!(
         drive(client.get(&ResourcePath::root(), None), &clock),
         Err(Error::Transport {
             source: http::HttpError::Timeout,
             ..
         })
-    ));
+    );
     assert_eq!(sim.requests().len(), 1);
 }

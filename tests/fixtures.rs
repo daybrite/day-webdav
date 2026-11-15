@@ -11,6 +11,7 @@ use day_webdav::{
 };
 use futures_lite::future::block_on;
 use serde::Deserialize;
+use std::assert_matches;
 use std::{
     collections::{HashMap, VecDeque},
     sync::{Arc, Mutex},
@@ -116,13 +117,13 @@ fn replay(raw: &str) {
         client.head(&file).await.unwrap();
         let etag = EntityTag::parse(get.header("etag").unwrap()).unwrap();
         assert_eq!(client.get(&file, Some(&etag)).await.unwrap().status, 304);
-        assert!(matches!(
+        assert_matches!(
             client
                 .put(&file, b"other".to_vec(), Condition::CreateOnly)
                 .await,
             Err(Error::Status { status: 412, .. })
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             client
                 .put(
                     &file,
@@ -131,24 +132,24 @@ fn replay(raw: &str) {
                 )
                 .await,
             Err(Error::Status { status: 412, .. })
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             client
                 .mkcol(&ResourcePath::from_segments(["missing", "child"], true).unwrap())
                 .await,
             Err(Error::Status { status: 409, .. })
-        ));
+        );
         client.copy(&file, &copy, false).await.unwrap();
-        assert!(matches!(
+        assert_matches!(
             client.copy(&file, &copy, false).await,
             Err(Error::Status { status: 412, .. })
-        ));
+        );
         client.move_resource(&copy, &moved, false).await.unwrap();
         client
             .delete(&moved, Condition::Unconditional)
             .await
             .unwrap();
-        assert!(matches!(
+        assert_matches!(
             client
                 .get(
                     &ResourcePath::from_segments(["items", "missing.bin"], false).unwrap(),
@@ -156,7 +157,7 @@ fn replay(raw: &str) {
                 )
                 .await,
             Err(Error::Status { status: 404, .. })
-        ));
+        );
         assert_eq!(
             client
                 .propfind(&file, Depth::Zero)
@@ -166,16 +167,14 @@ fn replay(raw: &str) {
                 .len(),
             1
         );
-        assert!(
-            matches!(client.get_range(&file,1,4,&range_tag).await.unwrap(),RangeDownload::Partial {response,..} if response.body==b"ynth")
-        );
-        assert!(matches!(
+        assert_matches!(client.get_range(&file,1,4,&range_tag).await.unwrap(),RangeDownload::Partial {response,..} if response.body==b"ynth");
+        assert_matches!(
             client
                 .get_range(&file, 1, 4, &EntityTag::parse("\"stale-fixture\"").unwrap())
                 .await
                 .unwrap(),
             RangeDownload::Restart(_)
-        ));
+        );
     });
     assert!(queue.lock().unwrap().is_empty());
     assert_eq!(simulation.requests().len(), 18);
@@ -225,7 +224,7 @@ fn apache_verbose_listing_supports_sync_history_and_reports_node_exhaustion() {
             .len(),
         4130
     );
-    assert!(matches!(
+    assert_matches!(
         MultiStatus::parse(
             large.as_bytes(),
             &endpoint,
@@ -236,5 +235,5 @@ fn apache_verbose_listing_supports_sync_history_and_reports_node_exhaustion() {
             }
         ),
         Err(Error::Limit)
-    ));
+    );
 }

@@ -265,8 +265,7 @@ fn serve(mut stream: TcpStream, shared: &Shared) -> io::Result<()> {
             let parent = path
                 .trim_end_matches('/')
                 .rsplit_once('/')
-                .map(|(p, _)| format!("{p}/"))
-                .unwrap_or_default();
+                .map_or_default(|(p, _)| format!("{p}/"));
             if headers.get("if-none-match").is_some_and(|v| v == "*") && entry.is_some()
                 || headers
                     .get("if-match")

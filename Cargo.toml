@@ -2,7 +2,7 @@
 name = "day-webdav"
 version = "0.2.2"
 edition = "2024"
-rust-version = "1.89"
+rust-version = "1.100"
 description = "Bounded, namespace-aware WebDAV over Day's native HTTP stacks"
 repository = "https://github.com/daybrite/day-webdav"
 license = "MPL-2.0"

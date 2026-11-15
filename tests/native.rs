@@ -71,22 +71,20 @@ fn lifecycle(provider: http::Provider, name: &str) {
             strong = EntityTag::parse(client.head(&file).await.unwrap().header("etag").unwrap())
                 .unwrap();
         }
-        assert!(
-            matches!(client.get_range(&file,1,4,&strong).await.unwrap(),RangeDownload::Partial {response,..} if response.body==b"ativ")
-        );
-        assert!(matches!(
+        std::assert_matches!(client.get_range(&file,1,4,&strong).await.unwrap(),RangeDownload::Partial {response,..} if response.body==b"ativ");
+        std::assert_matches!(
             client
                 .get_range(&file, 1, 4, &EntityTag::parse("\"stale-fixture\"").unwrap())
                 .await
                 .unwrap(),
             RangeDownload::Restart(_)
-        ));
-        assert!(matches!(
+        );
+        std::assert_matches!(
             client
                 .put(&file, b"replacement".to_vec(), Condition::CreateOnly)
                 .await,
             Err(Error::Status { status: 412, .. })
-        ));
+        );
         client.copy(&file, &copy, false).await.unwrap();
         client.move_resource(&copy, &moved, false).await.unwrap();
         assert_eq!(client.get(&moved, None).await.unwrap().body, bytes);
@@ -94,10 +92,10 @@ fn lifecycle(provider: http::Provider, name: &str) {
             .delete(&moved, Condition::Unconditional)
             .await
             .unwrap();
-        assert!(matches!(
+        std::assert_matches!(
             client.get(&moved, None).await,
             Err(Error::Status { status: 404, .. })
-        ));
+        );
         client
             .delete(&folder, Condition::Unconditional)
             .await

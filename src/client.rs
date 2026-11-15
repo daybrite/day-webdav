@@ -281,9 +281,7 @@ impl Client {
         path: &ResourcePath,
         if_none_match: Option<&EntityTag>,
     ) -> Result<Response, Error> {
-        let headers = if_none_match
-            .map(|t| vec![("If-None-Match".into(), t.0.clone())])
-            .unwrap_or_default();
+        let headers = if_none_match.map_or_default(|t| vec![("If-None-Match".into(), t.0.clone())]);
         let r = self
             .exchange(Method::Get, path, vec![], headers, true)
             .await?;

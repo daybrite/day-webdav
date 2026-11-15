@@ -33,12 +33,12 @@ fn exercise(provider: http::Provider) {
         let response = client.head(&file).await.unwrap();
         let tag = EntityTag::parse(response.header("etag").unwrap()).unwrap();
         assert_eq!(client.get(&file, Some(&tag)).await.unwrap().status, 304);
-        assert!(matches!(client.get_range(&file, 1, 4, &tag).await.unwrap(),
-            RangeDownload::Partial { response, .. } if response.body == b"ixtu"));
-        assert!(matches!(
+        std::assert_matches!(client.get_range(&file, 1, 4, &tag).await.unwrap(),
+            RangeDownload::Partial { response, .. } if response.body == b"ixtu");
+        std::assert_matches!(
             client.put(&file, vec![], Condition::CreateOnly).await,
             Err(Error::Status { status: 412, .. })
-        ));
+        );
         assert_eq!(
             client
                 .propfind(&ResourcePath::root(), Depth::One)
@@ -49,16 +49,14 @@ fn exercise(provider: http::Provider) {
             3
         );
         client.delete(&file, Condition::IfMatch(tag)).await.unwrap();
-        assert!(matches!(
+        std::assert_matches!(
             client.get(&file, None).await,
             Err(Error::Status { status: 404, .. })
-        ));
+        );
         let interrupted = ResourcePath::from_segments(["__drop__"], false).unwrap();
-        assert!(
-            matches!(
-                client.get(&interrupted, None).await,
-                Err(Error::Transport { .. })
-            ),
+        std::assert_matches!(
+            client.get(&interrupted, None).await,
+            Err(Error::Transport { .. }),
             "a truncated Content-Length must never return successful partial bytes"
         );
     });
