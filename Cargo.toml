@@ -24,6 +24,7 @@ url = "2"
 percent-encoding = "2"
 roxmltree = "0.21"
 httpdate = "1"
+uuid = { version = "1", features = ["v4", "js"] }
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -58,3 +59,7 @@ struct_excessive_bools = "allow"
 must_use_candidate = "allow"
 
 [workspace]
+members = ["crates/day-piece-webdav-settings"]
+default-members = [".", "crates/day-piece-webdav-settings"]
+exclude = ["demo"]
+resolver = "3"

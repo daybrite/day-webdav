@@ -1,0 +1,17 @@
+[package]
+name = "day-piece-webdav-settings"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+license = "MPL-2.0"
+repository = "https://github.com/daybrite/day-webdav"
+description = "Shared WebDAV account form for Day applications"
+
+[package.metadata.day]
+compat = "0.*"
+
+[dependencies]
+day = { package = "day-app", version = "0.*", default-features = false }
+
+[dev-dependencies]
+day = { package = "day-app", version = "0.*", features = ["mock"] }

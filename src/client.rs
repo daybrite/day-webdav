@@ -159,6 +159,58 @@ pub struct Client {
     inner: Arc<Inner>,
 }
 impl Client {
+    /// Run an enrollment trial inside a newly created, disposable child collection. Both
+    /// create-only PUT and readback must work. Cleanup is attempted even after a failed trial.
+    /// # Errors
+    /// Returns transport, authentication, permission, cleanup, or compatibility errors.
+    pub async fn check_writable_collection(&self) -> Result<(), Error> {
+        self.check_collection().await?;
+        let name = format!("day-connection-test-{}", uuid::Uuid::new_v4());
+        let dir = ResourcePath::from_segments([name.as_str()], true)?;
+        let file = ResourcePath::from_segments([name.as_str(), "probe"], false)?;
+        self.mkcol(&dir).await?;
+        let result =
+            async {
+                self.put(&file, name.as_bytes().to_vec(), Condition::CreateOnly)
+                    .await?;
+                match self.put(&file, vec![0], Condition::CreateOnly).await {
+                    Err(Error::Status { status: 412, .. }) => {}
+                    Err(e) => return Err(e),
+                    Ok(_) => return Err(Error::Protocol),
+                }
+                let listing = self.propfind(&dir, Depth::One).await?;
+                if !listing.resources.iter().any(|r| {
+                    r.href == self.endpoint().url(&file) && r.status.is_none_or(|s| s == 200)
+                }) || self.get(&file, None).await?.body != name.as_bytes()
+                {
+                    return Err(Error::Protocol);
+                }
+                Ok(())
+            }
+            .await;
+        let cleanup = self.delete(&dir, Condition::Unconditional).await;
+        result?;
+        cleanup.map(|_| ())
+    }
+    /// Authenticate to the configured collection and confirm that its own resource is readable.
+    /// # Errors
+    /// Returns the server or transport failure, or a protocol error for an incomplete response.
+    pub async fn check_collection(&self) -> Result<(), Error> {
+        let listing = self.propfind(&ResourcePath::root(), Depth::Zero).await?;
+        let root = self.endpoint().as_str().trim_end_matches('/');
+        if listing.resources.len() == 1
+            && listing.resources.iter().all(|r| {
+                r.href.trim_end_matches('/') == root
+                    && r.is_collection()
+                    && r.status.is_none_or(|s| s == 200)
+            })
+        {
+            Ok(())
+        } else {
+            Err(Error::Protocol)
+        }
+    }
+
     pub fn builder(endpoint: Endpoint) -> ClientBuilder {
         ClientBuilder {
             endpoint,

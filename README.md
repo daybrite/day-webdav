@@ -42,6 +42,15 @@ for provider switching or request interception. Enable `reqwest`, then call
 `session.set_provider(http::Provider::Reqwest)` before building a client. Web and HarmonyOS support
 only the native provider in the current HTTP layer.
 
+## Shared account settings
+
+Day applications can embed the [day-piece-webdav-settings crate](crates/day-piece-webdav-settings/).
+Pass localized field and action labels to `account_form` and handle submission in the
+app's account worker. Before saving credentials in the platform keychain, call
+`Client::check_writable_collection` against the selected collection. The trial creates
+a disposable child, checks conditional creation, confirms listing and byte-for-byte
+readback, and removes the child. Fleet Reader and Stanza Redux use this form.
+
 ## Develop and validate
 
 With this crate and the modified Day checkout as siblings:
@@ -70,6 +79,19 @@ rate limits and policy changes using the same HTTP simulation and a deterministi
 For capture reproduction and evidence, see [docs/interop.html](docs/interop.html).
 The live `tests/native.rs` tests are explicitly ignored without the capture harness, which supplies
 fresh isolated server roots. No production server credentials belong in these tests or fixtures.
+
+`tests/live_uploads.rs` checks empty files and exact-byte round trips at 256 KiB, 1 MiB, 4 MiB,
+and the default 8 MiB transfer bound. It creates and deletes a unique synthetic folder per
+provider. With an explicitly authorized account, supply `DAV_LIVE_URL`, `DAV_LIVE_USERNAME`,
+and `DAV_LIVE_PASSWORD` in the environment and run:
+
+```sh
+cargo test --features reqwest --test live_uploads -- --ignored --nocapture --test-threads=1
+```
+
+A failed PUT is read back for diagnosis, never automatically replayed. Passing a live run
+establishes compatibility for that workload; it does not guarantee service availability,
+quota, retention, or behavior under every network failure.
 
 ## Deliberate boundaries
 
