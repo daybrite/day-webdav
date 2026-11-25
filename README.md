@@ -45,11 +45,25 @@ only the native provider in the current HTTP layer.
 ## Shared account settings
 
 Day applications can embed the [day-piece-webdav-settings crate](crates/day-piece-webdav-settings/).
-Pass localized field and action labels to `account_form` and handle submission in the
-app's account worker. Before saving credentials in the platform keychain, call
-`Client::check_writable_collection` against the selected collection. The trial creates
-a disposable child, checks conditional creation, confirms listing and byte-for-byte
-readback, and removes the child. Fleet Reader and Stanza Redux use this form.
+Supply localized labels and an `AccountFields` value with the app’s default folder name.
+The server field accepts a custom DAV base URL, including paths such as a Nextcloud user’s
+DAV collection. The suggestions include [Fastmail](https://www.fastmail.help/hc/en-us/articles/1500000277882-Remote-file-access-WebDAV),
+[Koofr](https://koofr.eu/help/koofr_with_webdav/how-do-i-connect-a-service-to-koofr-through-webdav/)
+and both [pCloud regions](https://help.pcloud.com/article/connect-to-pcloud-using-webdav-and-rsync).
+Users enter the folder as a relative path with ordinary spaces and Unicode. An empty folder
+uses the base collection itself.
+
+`account_form` submits the canonical collection URL, relative folder, username and password.
+Save the folder alongside the endpoint so the form can restore both fields. On a new account
+with a nonempty folder, `Client::check_app_folder(true)` creates the final folder if missing.
+Its parent must exist. For credential updates or an empty folder, pass `false`. The trial
+creates a disposable child, tests conditional writes, lists and reads back its file, and
+removes the child before returning success. Save credentials only after the trial succeeds.
+
+Use `ConnectionFailure.step` and the HTTP status or `Error::diagnostic_code()` to populate
+the shared `failure_details` disclosure. The diagnostic code excludes credentials, URLs,
+response bodies and platform error text. Fleet Reader and Stanza Redux format these details
+using their app catalogs.
 
 ## Develop and validate
 

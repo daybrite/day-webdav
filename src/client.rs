@@ -73,6 +73,42 @@ pub struct Discovery {
     pub dav: Vec<String>,
     pub allow: Vec<String>,
 }
+/// The operation that failed during an account's disposable write trial.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConnectionStep {
+    CreateAppFolder,
+    OpenCollection,
+    CreateCollection,
+    CreateFile,
+    CheckCreateOnly,
+    ListFiles,
+    ReadFile,
+    RemoveCollection,
+}
+
+#[derive(Debug)]
+pub struct ConnectionFailure {
+    pub step: ConnectionStep,
+    pub source: Error,
+}
+
+impl ConnectionStep {
+    /// DAV method used by this step of the account check.
+    pub fn method(self) -> &'static str {
+        match self {
+            Self::OpenCollection | Self::ListFiles => "PROPFIND",
+            Self::CreateAppFolder | Self::CreateCollection => "MKCOL",
+            Self::CreateFile | Self::CheckCreateOnly => "PUT",
+            Self::ReadFile => "GET",
+            Self::RemoveCollection => "DELETE",
+        }
+    }
+
+    fn failed(self, source: Error) -> ConnectionFailure {
+        ConnectionFailure { step: self, source }
+    }
+}
+
 /// Callers may append only Partial bytes, after validating their existing prefix separately.
 #[derive(Debug)]
 pub enum RangeDownload {
@@ -164,33 +200,81 @@ impl Client {
     /// # Errors
     /// Returns transport, authentication, permission, cleanup, or compatibility errors.
     pub async fn check_writable_collection(&self) -> Result<(), Error> {
-        self.check_collection().await?;
+        self.check_writable_collection_detailed()
+            .await
+            .map_err(|failure| failure.source)
+    }
+
+    /// Run the enrollment trial and identify the failed operation for settings UIs.
+    /// # Errors
+    /// Returns the first failed check, or the cleanup error if all checks passed.
+    pub async fn check_writable_collection_detailed(&self) -> Result<(), ConnectionFailure> {
+        self.check_app_folder(false).await
+    }
+
+    /// Test this endpoint and, when requested, create its final collection if it is missing.
+    /// The parent collection must already exist. Credential updates should pass `false`.
+    ///
+    /// # Errors
+    /// Returns the failing operation and its DAV or transport error.
+    pub async fn check_app_folder(&self, create_missing: bool) -> Result<(), ConnectionFailure> {
+        use ConnectionStep as Step;
+        match self.check_collection().await {
+            Ok(()) => {}
+            Err(Error::Status { status: 404, .. }) if create_missing => {
+                // Another device may create the folder between PROPFIND and MKCOL.
+                match self.mkcol(&ResourcePath::root()).await {
+                    Ok(_) | Err(Error::Status { status: 405, .. }) => {}
+                    Err(e) => return Err(Step::CreateAppFolder.failed(e)),
+                }
+                self.check_collection()
+                    .await
+                    .map_err(|e| Step::OpenCollection.failed(e))?;
+            }
+            Err(e) => return Err(Step::OpenCollection.failed(e)),
+        }
         let name = format!("day-connection-test-{}", uuid::Uuid::new_v4());
-        let dir = ResourcePath::from_segments([name.as_str()], true)?;
-        let file = ResourcePath::from_segments([name.as_str(), "probe"], false)?;
-        self.mkcol(&dir).await?;
+        let dir = ResourcePath::from_segments([name.as_str()], true)
+            .map_err(|e| Step::CreateCollection.failed(e))?;
+        let file = ResourcePath::from_segments([name.as_str(), "probe"], false)
+            .map_err(|e| Step::CreateFile.failed(e))?;
+        self.mkcol(&dir)
+            .await
+            .map_err(|e| Step::CreateCollection.failed(e))?;
         let result =
             async {
                 self.put(&file, name.as_bytes().to_vec(), Condition::CreateOnly)
-                    .await?;
+                    .await
+                    .map_err(|e| Step::CreateFile.failed(e))?;
                 match self.put(&file, vec![0], Condition::CreateOnly).await {
                     Err(Error::Status { status: 412, .. }) => {}
-                    Err(e) => return Err(e),
-                    Ok(_) => return Err(Error::Protocol),
+                    Err(e) => return Err(Step::CheckCreateOnly.failed(e)),
+                    Ok(_) => return Err(Step::CheckCreateOnly.failed(Error::Protocol)),
                 }
-                let listing = self.propfind(&dir, Depth::One).await?;
+                let listing = self
+                    .propfind(&dir, Depth::One)
+                    .await
+                    .map_err(|e| Step::ListFiles.failed(e))?;
                 if !listing.resources.iter().any(|r| {
                     r.href == self.endpoint().url(&file) && r.status.is_none_or(|s| s == 200)
-                }) || self.get(&file, None).await?.body != name.as_bytes()
-                {
-                    return Err(Error::Protocol);
+                }) {
+                    return Err(Step::ListFiles.failed(Error::Protocol));
+                }
+                let response = self
+                    .get(&file, None)
+                    .await
+                    .map_err(|e| Step::ReadFile.failed(e))?;
+                if response.body != name.as_bytes() {
+                    return Err(Step::ReadFile.failed(Error::Protocol));
                 }
                 Ok(())
             }
             .await;
         let cleanup = self.delete(&dir, Condition::Unconditional).await;
         result?;
-        cleanup.map(|_| ())
+        cleanup
+            .map(|_| ())
+            .map_err(|e| Step::RemoveCollection.failed(e))
     }
     /// Authenticate to the configured collection and confirm that its own resource is readable.
     /// # Errors

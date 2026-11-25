@@ -14,7 +14,8 @@ mod policy;
 #[cfg(all(feature = "demo-server", not(target_arch = "wasm32")))]
 pub mod testing;
 pub use client::{
-    Authentication, Client, ClientBuilder, Condition, Depth, Discovery, EntityTag, RangeDownload,
+    Authentication, Client, ClientBuilder, Condition, ConnectionFailure, ConnectionStep, Depth,
+    Discovery, EntityTag, RangeDownload,
 };
 pub use day_part_http as http;
 pub use endpoint::{Endpoint, ResourcePath};
@@ -74,4 +75,33 @@ impl std::fmt::Display for Error {
         })
     }
 }
+impl Error {
+    /// A redacted diagnostic identifier. Excludes URLs, credentials and server error text.
+    pub fn diagnostic_code(&self) -> String {
+        use http::{HttpError as H, NetworkRestriction as N};
+        match self {
+            Self::Transport { source, .. } => match source {
+                H::NetworkRestricted(N::Expensive) => "network.expensive",
+                H::NetworkRestricted(N::Constrained) => "network.constrained",
+                H::NetworkRestricted(N::Cellular) => "network.cellular",
+                H::Dns => "http.dns",
+                H::Connect => "http.connect",
+                H::Timeout => "http.timeout",
+                H::Tls(_) => "http.tls",
+                H::Io(_) => "http.io",
+                H::BadUrl(_) => "http.bad_url",
+                H::Cancelled => "http.cancelled",
+                H::Unsupported => "http.unsupported",
+                H::BodyTooLarge { .. } => "http.body_too_large",
+                _ => "dav.transport",
+            },
+            Self::Deferred(NetworkState::Expensive) => "network.expensive",
+            Self::Deferred(NetworkState::Constrained) => "network.constrained",
+            Self::Deferred(NetworkState::Offline) => "network.offline",
+            _ => return self.to_string(),
+        }
+        .into()
+    }
+}
+
 impl std::error::Error for Error {}

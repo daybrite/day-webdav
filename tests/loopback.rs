@@ -61,3 +61,26 @@ fn exercise(provider: http::Provider) {
         );
     });
 }
+
+#[test]
+fn new_account_creates_only_the_app_folder_and_cleans_up_its_probe() {
+    let server = testing::Server::start().unwrap();
+    let endpoint = Endpoint::loopback(&format!("{}books/", server.url())).unwrap();
+    let client = Client::builder(endpoint).build();
+    futures_lite::future::block_on(async {
+        let missing = client.check_app_folder(false).await.unwrap_err();
+        assert_eq!(missing.step, ConnectionStep::OpenCollection);
+        std::assert_matches!(missing.source, Error::Status { status: 404, .. });
+        client.check_app_folder(true).await.unwrap();
+        client.check_app_folder(false).await.unwrap();
+        assert_eq!(
+            client
+                .propfind(&ResourcePath::root(), Depth::One)
+                .await
+                .unwrap()
+                .resources
+                .len(),
+            1
+        );
+    });
+}

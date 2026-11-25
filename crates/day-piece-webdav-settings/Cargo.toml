@@ -11,6 +11,7 @@ description = "Shared WebDAV account form for Day applications"
 compat = "0.*"
 
 [dependencies]
+day-webdav = { path = "../..", version = "0.*" }
 day = { package = "day-app", version = "0.*", default-features = false }
 
 [dev-dependencies]

@@ -298,3 +298,70 @@ fn slow_link_obeys_total_deadline() {
     );
     assert_eq!(sim.requests().len(), 1);
 }
+
+#[test]
+fn account_check_reports_the_operation_that_failed() {
+    for (root_status, step, expected) in [
+        (404, ConnectionStep::OpenCollection, 404),
+        (401, ConnectionStep::OpenCollection, 401),
+        (207, ConnectionStep::CreateCollection, 403),
+    ] {
+        let (client, sim, clock) = setup(Policy::default());
+        sim.handle(|_, _| true, move |request| {
+            if request.method == "MKCOL" {
+                Ok(Reply::new(403, vec![]))
+            } else {
+                assert_eq!(request.method, "PROPFIND");
+                let xml = br#"<multistatus xmlns="DAV:"><response><href>/dav/</href><propstat><prop><resourcetype><collection/></resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>"#;
+                Ok(Reply::new(root_status, xml.to_vec()))
+            }
+        });
+        let failure = drive(client.check_writable_collection_detailed(), &clock).unwrap_err();
+        assert_eq!(failure.step, step);
+        assert_matches!(failure.source, Error::Status { status, .. } if status == expected);
+    }
+}
+
+#[test]
+fn app_folder_creation_requires_a_missing_collection() {
+    for status in [401, 403, 301] {
+        let (client, sim, clock) = setup(Policy::default());
+        sim.handle(|_, _| true, move |_| Ok(Reply::new(status, vec![])));
+        let result = drive(client.check_app_folder(true), &clock);
+        assert_eq!(result.unwrap_err().step, ConnectionStep::OpenCollection);
+        assert_eq!(sim.requests().len(), 1);
+    }
+}
+
+#[test]
+fn connection_probe_keeps_network_policy_refusals_distinct_from_an_outage() {
+    use http::{NetworkConditions, NetworkRestriction};
+    for (expensive, constrained, reason, code) in [
+        (
+            true,
+            false,
+            NetworkRestriction::Expensive,
+            "network.expensive",
+        ),
+        (
+            false,
+            true,
+            NetworkRestriction::Constrained,
+            "network.constrained",
+        ),
+    ] {
+        let (client, sim, clock) = setup(Policy::default());
+        sim.set_conditions(Conditions {
+            network: NetworkConditions {
+                expensive: Some(expensive),
+                constrained: Some(constrained),
+            },
+            ..Conditions::default()
+        });
+        let failure = drive(client.check_app_folder(true), &clock).unwrap_err();
+        assert_eq!(failure.step, ConnectionStep::OpenCollection);
+        assert_eq!(failure.source.diagnostic_code(), code);
+        assert_matches!(failure.source, Error::Transport { source: http::HttpError::NetworkRestricted(r), .. } if r == reason);
+        assert!(sim.requests().is_empty());
+    }
+}
