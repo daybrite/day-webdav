@@ -111,6 +111,22 @@ quota, retention, or behavior under every network failure.
 
 No LOCK/UNLOCK, PROPPATCH or RFC 6578 REPORT client API yet (the HTTP layer recognizes these verbs).
 No automatic redirects, infinite-depth traversal, cookie login, Digest/NTLM integration, Nextcloud
-chunked upload, streaming-to-file, durable retry queue, background OS scheduling or conflict resolver.
-Large files need a later streaming/chunked design: the current API bounds each buffered transfer.
+chunked upload, durable retry queue, background OS scheduling or conflict resolver.
+`create_file` sends an immutable local file with a conditional PUT. Its progress variant
+delivers sent-byte counts on the polling task when the HTTP provider supports them.
+`read_file` streams a complete GET into a caller-owned staging sink. Both accept explicit
+byte limits and use an idle timeout. Providers without streaming uploads can buffer the
+source file. The regular byte-vector methods retain their separate request/response limits.
 Browser use additionally requires server CORS permission and exposed protocol headers.
+
+### Account settings sections
+
+`day-piece-webdav-settings::account_sections` supplies separate server and account sections
+for a `day-piece-settings::Group`. UIKit presents these as native inset-grouped table rows;
+desktop settings retain their native panel presentation. Building the settings group does
+not read the keychain. Mounting the password row loads the saved credential into its
+masked field. The row keeps the draft after submission so the user can correct a failed
+verification. Disposing the row clears the credential from the draft. A blank password
+can reuse the saved credential for the same endpoint and username.
+The standalone `account_form` requires an explicit password and clears it on submission.
+Applications provide all localized labels, status and transfer progress.

@@ -63,6 +63,34 @@ fn interrupted_read_retries_without_returning_partial_bytes() {
     assert_eq!(calls.load(Ordering::SeqCst), 2);
 }
 #[test]
+fn upload_reports_sent_bytes_while_the_put_response_is_still_pending() {
+    let (client, sim, clock) = setup(Policy::default());
+    sim.set_conditions(Conditions {
+        bytes_per_second: Some(8),
+        ..Default::default()
+    });
+    sim.handle(
+        |_, _| true,
+        |request| {
+            assert_eq!(request.method, "PUT");
+            Ok(Reply::new(201, vec![0; 8]))
+        },
+    );
+    let mut file = tempfile::NamedTempFile::new().unwrap();
+    std::io::Write::write_all(&mut file, b"12345678").unwrap();
+    let path = ResourcePath::from_segments(["fixture.bin"], false).unwrap();
+    let sent = std::cell::Cell::new(0);
+    let mut upload =
+        Box::pin(client.create_file_with_progress(&path, file.path(), 8, |n| sent.set(n)));
+    assert!(poll(upload.as_mut()).is_pending());
+    assert_eq!(sent.get(), 0);
+    clock.advance(Duration::from_secs(1));
+    assert!(poll(upload.as_mut()).is_pending());
+    assert_eq!(sent.get(), 8);
+    drive(upload, &clock).unwrap();
+}
+
+#[test]
 fn ambiguous_write_is_not_replayed() {
     let (client, sim, clock) = setup(Policy::default());
     sim.handle(|_, _| true, |_| Err(http::HttpError::Connect));

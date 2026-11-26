@@ -48,12 +48,54 @@ fn exercise(provider: http::Provider) {
                 .len(),
             3
         );
+        let mut source = tempfile::NamedTempFile::new().unwrap();
+        std::io::Write::write_all(&mut source, &body).unwrap();
+        let streaming = ResourcePath::from_segments(["streamed.bin"], false).unwrap();
+        let size = body.len() as u64;
+        std::assert_matches!(
+            client
+                .create_file(&streaming, source.path(), size - 1)
+                .await,
+            Err(Error::Limit)
+        );
+        let mut observations = Vec::new();
+        let caller = std::thread::current().id();
+        client
+            .create_file_with_progress(&streaming, source.path(), size, |n| {
+                assert_eq!(caller, std::thread::current().id());
+                observations.push(n);
+            })
+            .await
+            .unwrap();
+        assert_eq!(observations.first(), Some(&0));
+        assert_eq!(observations.last(), Some(&size));
+        std::assert_matches!(
+            client.create_file(&streaming, source.path(), size).await,
+            Err(Error::Status { status: 412, .. })
+        );
+        let mut received = Vec::new();
+        std::assert_matches!(
+            client.read_file(&streaming, &mut received, size - 1).await,
+            Err(Error::Limit)
+        );
+        assert_eq!(received, b"");
+        client
+            .read_file(&streaming, &mut received, size)
+            .await
+            .unwrap();
+        assert_eq!(received, body);
         client.delete(&file, Condition::IfMatch(tag)).await.unwrap();
         std::assert_matches!(
             client.get(&file, None).await,
             Err(Error::Status { status: 404, .. })
         );
         let interrupted = ResourcePath::from_segments(["__drop__"], false).unwrap();
+        assert!(
+            client
+                .read_file(&interrupted, &mut std::io::sink(), 1024)
+                .await
+                .is_err()
+        );
         std::assert_matches!(
             client.get(&interrupted, None).await,
             Err(Error::Transport { .. }),

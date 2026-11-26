@@ -653,6 +653,149 @@ impl Client {
             outcome,
         })
     }
+    fn request(&self, method: Method, path: &ResourcePath) -> Request {
+        let policy = &self.inner.policy;
+        let request = Request::new(method, self.endpoint().url(path))
+            .timeout(policy.idle_timeout)
+            .allow_expensive(policy.allow_expensive)
+            .allow_constrained(policy.allow_constrained)
+            .cache(CachePolicy::Reload)
+            .header("Accept-Encoding", "identity")
+            .header("User-Agent", "day-webdav/0.1");
+        match &self.inner.auth {
+            Authentication::None => request,
+            Authentication::Basic { username, password } => request.basic_auth(username, password),
+            Authentication::Bearer(token) => request.bearer(token),
+        }
+    }
+
+    /// Create a resource from a local file with a single conditional PUT. File transfers
+    /// use the explicit byte bound and idle timeout so progressing large uploads can finish.
+    /// The source must remain immutable until the call returns.
+    ///
+    /// # Errors
+    /// Returns a policy, I/O, size, transport or HTTP error, including 412 for an occupied name.
+    pub async fn create_file(
+        &self,
+        path: &ResourcePath,
+        file: &std::path::Path,
+        limit: u64,
+    ) -> Result<(), Error> {
+        self.create_file_with_progress(path, file, limit, |_| {})
+            .await
+    }
+
+    /// Conditional file PUT with cumulative sent bytes delivered on the polling task.
+    /// Providers without intermediate upload events report completion after the PUT succeeds.
+    /// # Errors
+    /// Returns the same failures as [`Self::create_file`].
+    pub async fn create_file_with_progress(
+        &self,
+        path: &ResourcePath,
+        file: &std::path::Path,
+        limit: u64,
+        mut progress: impl FnMut(u64),
+    ) -> Result<(), Error> {
+        use std::future::{Future, poll_fn};
+        self.admit()?;
+        let size = file.metadata().map_err(Error::LocalIo)?.len();
+        if size > limit {
+            return Err(Error::Limit);
+        }
+        let sent = Arc::new((AtomicU64::new(0), atomic_waker::AtomicWaker::new()));
+        let events = sent.clone();
+        let request = self
+            .request(Method::Put, path)
+            .header("If-None-Match", "*")
+            .body_file(file)
+            .upload_progress(move |bytes, _| {
+                if events.0.fetch_max(bytes, Ordering::Relaxed) < bytes {
+                    events.1.wake();
+                }
+            });
+        let mut exchange = std::pin::pin!(
+            self.inner
+                .http
+                .fetch_limited_future(request, self.inner.policy.max_response_bytes)
+        );
+        let mut reported = 0;
+        progress(0);
+        let reply = poll_fn(|cx| {
+            sent.1.register(cx.waker());
+            let result = exchange.as_mut().poll(cx);
+            let latest = sent.0.load(Ordering::Relaxed).min(size);
+            if latest > reported {
+                reported = latest;
+                progress(latest);
+            }
+            result
+        })
+        .await
+        .map_err(|source| Error::Transport {
+            source,
+            outcome: WriteOutcome::MayHaveApplied,
+        })?;
+        self.mutation_status(&reply, path, &[200, 201, 204])?;
+        if reported < size {
+            progress(size);
+        }
+        Ok(())
+    }
+
+    /// Stream a complete GET into a staging sink with a hard bound on received bytes.
+    ///
+    /// # Errors
+    /// Returns a policy, HTTP, size, sink, or transport error. Discard incomplete output.
+    pub async fn read_file(
+        &self,
+        path: &ResourcePath,
+        sink: &mut dyn std::io::Write,
+        limit: u64,
+    ) -> Result<(), Error> {
+        self.admit()?;
+        let failure = |source| Error::Transport {
+            source,
+            outcome: WriteOutcome::NotSent,
+        };
+        let stream = self
+            .inner
+            .http
+            .send_future(self.request(Method::Get, path))
+            .await
+            .map_err(failure)?;
+        if stream.status() != 200 {
+            let head = Response {
+                status: stream.status(),
+                headers: stream.headers().to_vec(),
+                body: Vec::new(),
+                url: String::new(),
+                metrics: None,
+            };
+            return self.status(&head, &[200], false);
+        }
+        let expected = stream
+            .header("Content-Length")
+            .map(str::parse::<u64>)
+            .transpose()
+            .map_err(|_| Error::Protocol)?;
+        if expected.is_some_and(|n| n > limit) {
+            return Err(Error::Limit);
+        }
+        let mut received = 0u64;
+        let mut body = stream.into_body();
+        while let Some(chunk) = body.next().await {
+            let chunk = chunk.map_err(failure)?;
+            received = received
+                .checked_add(chunk.len() as u64)
+                .filter(|n| *n <= limit)
+                .ok_or(Error::Limit)?;
+            sink.write_all(&chunk).map_err(Error::LocalIo)?;
+        }
+        if expected.is_some_and(|n| n != received) {
+            return Err(Error::Protocol);
+        }
+        Ok(())
+    }
     async fn exchange(
         &self,
         method: Method,
@@ -681,28 +824,14 @@ impl Client {
                     outcome: WriteOutcome::NotSent,
                 });
             }
-            let mut request = Request::new(method, self.endpoint().url(path))
-                .timeout(p.idle_timeout)
-                .timeout_total(if safe {
-                    p.request_timeout.min(remaining)
-                } else {
-                    p.request_timeout
-                })
-                .allow_expensive(p.allow_expensive)
-                .allow_constrained(p.allow_constrained)
-                .cache(CachePolicy::Reload)
-                .header("Accept-Encoding", "identity")
-                .header("User-Agent", "day-webdav/0.1");
+            let mut request = self.request(method, path).timeout_total(if safe {
+                p.request_timeout.min(remaining)
+            } else {
+                p.request_timeout
+            });
             if !bytes.is_empty() {
                 request = request.body(bytes.clone());
             }
-            request = match &self.inner.auth {
-                Authentication::None => request,
-                Authentication::Basic { username, password } => {
-                    request.basic_auth(username, password)
-                }
-                Authentication::Bearer(token) => request.bearer(token),
-            };
             for (name, value) in &headers {
                 request = request.header(name, value);
             }

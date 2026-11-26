@@ -40,6 +40,7 @@ pub enum Error {
     InvalidEntityTag,
     Xml,
     Limit,
+    LocalIo(std::io::Error),
     Deferred(NetworkState),
     Transport {
         source: http::HttpError,
@@ -66,6 +67,7 @@ impl std::fmt::Display for Error {
             Self::InvalidEntityTag => "dav.invalid_etag",
             Self::Xml => "dav.invalid_xml",
             Self::Limit => "dav.limit",
+            Self::LocalIo(_) => "dav.local_io",
             Self::Deferred(_) => "dav.deferred",
             Self::Transport { .. } => "dav.transport",
             Self::Status { .. } => "dav.status",
@@ -80,6 +82,14 @@ impl Error {
     pub fn diagnostic_code(&self) -> String {
         use http::{HttpError as H, NetworkRestriction as N};
         match self {
+            Self::LocalIo(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::StorageFull | std::io::ErrorKind::QuotaExceeded
+                ) =>
+            {
+                "local.insufficient_storage"
+            }
             Self::Transport { source, .. } => match source {
                 H::NetworkRestricted(N::Expensive) => "network.expensive",
                 H::NetworkRestricted(N::Constrained) => "network.constrained",
@@ -104,4 +114,12 @@ impl Error {
     }
 }
 
-impl std::error::Error for Error {}
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::LocalIo(e) => Some(e),
+            Self::Transport { source, .. } => Some(source),
+            _ => None,
+        }
+    }
+}
