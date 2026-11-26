@@ -218,6 +218,23 @@ impl Client {
     /// # Errors
     /// Returns the failing operation and its DAV or transport error.
     pub async fn check_app_folder(&self, create_missing: bool) -> Result<(), ConnectionFailure> {
+        self.probe_folder(create_missing, false).await
+    }
+
+    /// Verify create-only and strong ETag updates in a disposable collection.
+    ///
+    /// # Errors
+    /// Returns a connection failure if authentication, readback, conditional updates
+    /// or cleanup fail. An existing folder is required.
+    pub async fn check_document_collection(&self) -> Result<(), ConnectionFailure> {
+        self.probe_folder(false, true).await
+    }
+
+    async fn probe_folder(
+        &self,
+        create_missing: bool,
+        conditional_updates: bool,
+    ) -> Result<(), ConnectionFailure> {
         use ConnectionStep as Step;
         match self.check_collection().await {
             Ok(()) => {}
@@ -233,7 +250,16 @@ impl Client {
             }
             Err(e) => return Err(Step::OpenCollection.failed(e)),
         }
-        let name = format!("day-connection-test-{}", uuid::Uuid::new_v4());
+        #[cfg(not(target_arch = "wasm32"))]
+        let nonce = uuid::Uuid::new_v4();
+        #[cfg(target_arch = "wasm32")]
+        let nonce = {
+            let mut bytes = [0_u8; 16];
+            getrandom::fill(&mut bytes)
+                .map_err(|_| Step::CreateCollection.failed(Error::Protocol))?;
+            uuid::Uuid::from_bytes(bytes)
+        };
+        let name = format!("day-connection-test-{nonce}");
         let dir = ResourcePath::from_segments([name.as_str()], true)
             .map_err(|e| Step::CreateCollection.failed(e))?;
         let file = ResourcePath::from_segments([name.as_str(), "probe"], false)
@@ -266,6 +292,30 @@ impl Client {
                     .map_err(|e| Step::ReadFile.failed(e))?;
                 if response.body != name.as_bytes() {
                     return Err(Step::ReadFile.failed(Error::Protocol));
+                }
+                if conditional_updates {
+                    let tag = response
+                        .header("ETag")
+                        .and_then(|v| EntityTag::parse(v).ok())
+                        .filter(|t| !t.is_weak())
+                        .ok_or_else(|| Step::ReadFile.failed(Error::Protocol))?;
+                    self.put(&file, vec![1], Condition::IfMatch(tag.clone()))
+                        .await
+                        .map_err(|e| Step::CreateFile.failed(e))?;
+                    match self.put(&file, vec![2], Condition::IfMatch(tag)).await {
+                        Err(Error::Status { status: 412, .. }) => {}
+                        Err(e) => return Err(Step::CheckCreateOnly.failed(e)),
+                        Ok(_) => return Err(Step::CheckCreateOnly.failed(Error::Protocol)),
+                    }
+                    if self
+                        .get(&file, None)
+                        .await
+                        .map_err(|e| Step::ReadFile.failed(e))?
+                        .body
+                        != [1]
+                    {
+                        return Err(Step::ReadFile.failed(Error::Protocol));
+                    }
                 }
                 Ok(())
             }

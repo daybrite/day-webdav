@@ -351,6 +351,49 @@ fn account_check_reports_the_operation_that_failed() {
 }
 
 #[test]
+fn document_probe_rejects_weak_or_ignored_validators_and_cleans_up() {
+    for weak in [true, false] {
+        let (client, simulation, clock) = setup(Policy::default());
+        let writes = Arc::new(AtomicUsize::new(0));
+        let count = Arc::clone(&writes);
+        simulation.handle(|_, _| true, move |request| {
+            let reply = match request.method.as_str() {
+                "PROPFIND" => {
+                    let (href, resource_type) = if request.url.ends_with("/dav/") {
+                        (request.url, "<collection/>")
+                    } else {
+                        (format!("{}/probe", request.url.trim_end_matches('/')), "")
+                    };
+                    let xml = format!(
+                        r#"<multistatus xmlns="DAV:"><response><href>{href}</href><propstat><prop><resourcetype>{resource_type}</resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>"#
+                    );
+                    Reply::new(207, xml.into_bytes())
+                }
+                "MKCOL" => Reply::new(201, vec![]),
+                "PUT" => {
+                    let n = count.fetch_add(1, Ordering::SeqCst);
+                    // This synthetic server enforces create-only but incorrectly accepts
+                    // both the current and the obsolete If-Match on replacement.
+                    Reply::new(if n == 1 { 412 } else { 201 }, vec![])
+                }
+                "GET" => {
+                    let nonce = request.url.rsplit('/').nth(1).unwrap();
+                    let tag = if weak { r#"W/"one""# } else { r#""one""# };
+                    Reply::new(200, nonce.as_bytes().to_vec()).header("ETag", tag)
+                }
+                "DELETE" => Reply::new(204, vec![]),
+                method => panic!("unexpected fixture method {method}"),
+            };
+            Ok(reply)
+        });
+        let failure = drive(client.check_document_collection(), &clock).unwrap_err();
+        assert_matches!(failure.source, Error::Protocol);
+        assert_eq!(writes.load(Ordering::SeqCst), if weak { 2 } else { 4 });
+        assert_eq!(simulation.requests().last().unwrap().method, "DELETE");
+    }
+}
+
+#[test]
 fn app_folder_creation_requires_a_missing_collection() {
     for status in [401, 403, 301] {
         let (client, sim, clock) = setup(Policy::default());
